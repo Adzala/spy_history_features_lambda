@@ -1,0 +1,40 @@
+# Orchestration Configuration for SPY History Features Lambda
+# This file contains settings for the batch processing orchestration script
+
+# Lambda Configuration
+lambda:
+  function_name: spy-history-features
+  region: us-east-1
+  
+# S3 Configuration
+s3:
+  source_bucket: spy-no-history-features
+  dest_bucket: spy-with-history-features
+  source_prefix: one-minute/
+  dest_prefix: one-minute/
+
+# Threading Configuration
+threading:
+  max_threads: 20  # Maximum concurrent date threads
+  batch_size: null  # null = process all files for date in single Lambda invocation
+                    # Set to integer (e.g., 50) to limit batch size per invocation
+
+# Retry Configuration
+retry:
+  max_retries: 3
+  base_delay_seconds: 1.0
+  max_delay_seconds: 60
+
+# Logging Configuration
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+# Processing Configuration
+processing:
+  history_window_size: 300  # Number of minutes to maintain in history queue
+  timeout_buffer_seconds: 5  # Buffer before Lambda timeout to gracefully terminate
+  
+# Feature Configuration
+features:
+  numeric_precision: 4  # Decimal places for rounding

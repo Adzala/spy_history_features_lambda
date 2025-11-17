@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SPY History Features Lambda - Computes lookback features from rolling history window
+
+Parameters:
+  SourceBucket:
+    Type: String
+    Default: spy-no-history-features
+    Description: S3 bucket containing snapshot features (output from feature engineering lambda)
+  
+  DestBucket:
+    Type: String
+    Default: spy-with-history-features
+    Description: S3 bucket for data enriched with history features
+
+Globals:
+  Function:
+    Timeout: 900  # 15 minutes
+    MemorySize: 1024  # 1024MB for history queue
+    Runtime: python3.11
+    Architectures:
+      - x86_64
+
+Resources:
+  # Lambda Function for History Features
+  HistoryFeaturesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: spy-history-features
+      CodeUri: .
+      Handler: handler.lambda_handler
+      Role: arn:aws:iam::641498282485:role/Admin-Aum
+      ReservedConcurrentExecutions: 40
+      Environment:
+        Variables:
+          SOURCE_BUCKET: !Ref SourceBucket
+          DEST_BUCKET: !Ref DestBucket
+          HISTORY_WINDOW_SIZE: 300
+          NUMERIC_PRECISION: 4
+          TIMEOUT_BUFFER_SECONDS: 5
+          LOG_LEVEL: INFO
+      Layers:
+        # AWS-managed Pandas/PyArrow/NumPy layer
+        - !Sub 'arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSSDKPandas-Python311:7'
+      Tags:
+        Project: SPY-History-Features
+
+Outputs:
+  FunctionArn:
+    Description: History Features Lambda Function ARN
+    Value: !GetAtt HistoryFeaturesFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionArn'
+  
+  FunctionName:
+    Description: History Features Lambda Function Name
+    Value: !Ref HistoryFeaturesFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionName'

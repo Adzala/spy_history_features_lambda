@@ -1,0 +1,9 @@
+# Core AWS SDK
+# Note: boto3 is provided by Lambda runtime, no need to include
+
+# Data processing
+# Note: numpy, pandas, and pyarrow are provided by AWS Lambda Layer
+# (AWSSDKPandas-Python311:7) - see template.yaml
+
+# Configuration
+pyyaml>=6.0,<7.0

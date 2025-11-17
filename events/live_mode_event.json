@@ -1,0 +1,6 @@
+{
+  "mode": "live",
+  "s3_uris": [
+    "s3://spy-no-history-features/one-minute/20250325/strikes_202503250935.parquet"
+  ]
+}
