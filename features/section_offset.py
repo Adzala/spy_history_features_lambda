@@ -67,45 +67,49 @@ class SectionOffsetFeatures(FeatureSection):
             # Get ATM IV for this expiry (offset 0)
             atm_iv = self._get_offset_value(expiry_group, 0, 'CallIVMid')
             
-            # Process each offset
+            # Get all indices for this expiry (we'll broadcast features to all rows)
+            expiry_indices = expiry_group.index
+            
+            # Process each offset - compute once and broadcast to all rows in expiry
             for offset in self.OFFSETS:
                 # Get current values for this offset
                 current_iv = self._get_offset_value(expiry_group, offset, 'CallIVMid')
                 current_spread = self._get_offset_value(expiry_group, offset, 'CallSpreadPct')
                 
-                # Get indices for rows with this offset
-                offset_indices = expiry_group[expiry_group['distance_to_atm'] == offset].index
-                
-                if len(offset_indices) == 0:
+                # Skip if this offset doesn't exist in current data
+                if pd.isna(current_iv):
                     continue
                 
-                # Compute IV change features
-                df_result.loc[offset_indices, f'IV_offsetChange_{offset}_L1'] = self._compute_offset_change(
+                # Compute features for this offset (scalar values)
+                iv_change_l1 = self._compute_offset_change(
                     history_mgr, expiry, offset, current_iv, 'CallIVMid', lag=1
                 )
-                df_result.loc[offset_indices, f'IV_offsetChange_{offset}_L5'] = self._compute_offset_change(
+                iv_change_l5 = self._compute_offset_change(
                     history_mgr, expiry, offset, current_iv, 'CallIVMid', lag=5
                 )
-                
-                # Compute IV z-score features
-                df_result.loc[offset_indices, f'IV_offsetZ_{offset}_5'] = self._compute_offset_zscore(
+                iv_z_5 = self._compute_offset_zscore(
                     history_mgr, expiry, offset, current_iv, 'CallIVMid', window=5
                 )
-                df_result.loc[offset_indices, f'IV_offsetZ_{offset}_15'] = self._compute_offset_zscore(
+                iv_z_15 = self._compute_offset_zscore(
                     history_mgr, expiry, offset, current_iv, 'CallIVMid', window=15
                 )
+                iv_skew = current_iv - atm_iv if not pd.isna(atm_iv) else np.nan
                 
-                # Compute IV skew to ATM
-                if not pd.isna(current_iv) and not pd.isna(atm_iv):
-                    df_result.loc[offset_indices, f'IV_SkewToATM_{offset}'] = current_iv - atm_iv
-                
-                # Compute SpreadPct z-score features
-                df_result.loc[offset_indices, f'SpreadPct_offsetZ_{offset}_5'] = self._compute_offset_zscore(
+                spread_z_5 = self._compute_offset_zscore(
                     history_mgr, expiry, offset, current_spread, 'CallSpreadPct', window=5
-                )
-                df_result.loc[offset_indices, f'SpreadPct_offsetZ_{offset}_15'] = self._compute_offset_zscore(
+                ) if not pd.isna(current_spread) else np.nan
+                spread_z_15 = self._compute_offset_zscore(
                     history_mgr, expiry, offset, current_spread, 'CallSpreadPct', window=15
-                )
+                ) if not pd.isna(current_spread) else np.nan
+                
+                # Broadcast these values to ALL rows in this expiry
+                df_result.loc[expiry_indices, f'IV_offsetChange_{offset}_L1'] = iv_change_l1
+                df_result.loc[expiry_indices, f'IV_offsetChange_{offset}_L5'] = iv_change_l5
+                df_result.loc[expiry_indices, f'IV_offsetZ_{offset}_5'] = iv_z_5
+                df_result.loc[expiry_indices, f'IV_offsetZ_{offset}_15'] = iv_z_15
+                df_result.loc[expiry_indices, f'IV_SkewToATM_{offset}'] = iv_skew
+                df_result.loc[expiry_indices, f'SpreadPct_offsetZ_{offset}_5'] = spread_z_5
+                df_result.loc[expiry_indices, f'SpreadPct_offsetZ_{offset}_15'] = spread_z_15
         
         # Round all computed features to 4 decimals
         computed_features = self.feature_names

@@ -6,6 +6,8 @@ import traceback
 from datetime import datetime
 from typing import Dict, Any
 import pandas as pd
+import boto3
+from botocore.config import Config as BotocoreConfig
 
 from config import Config
 from s3_manager import S3Manager
@@ -178,7 +180,13 @@ def load_historical_context(uri: str, s3_mgr: S3Manager, history_mgr: HistoryMan
     
     # Build index of available S3 files by listing dates around current date
     bucket = Config.get_source_bucket()
-    s3_client = boto3.client('s3')
+    
+    # Configure S3 client with larger connection pool
+    s3_config = BotocoreConfig(
+        max_pool_connections=50,
+        retries={'max_attempts': 3, 'mode': 'adaptive'}
+    )
+    s3_client = boto3.client('s3', config=s3_config)
     
     # List dates to check (current date and up to 5 days before)
     dates_to_check = []
@@ -297,13 +305,15 @@ def process_file(uri: str, engine: FeatureEngine, s3_mgr: S3Manager,
     
     logger.info(f"Processing date={date}, minute={minute}")
     
-    # Step 4: Add DataFrame to history manager with temporal validation
-    history_mgr.add_minute(df, date, minute)
-    logger.info(f"History queue size: {history_mgr.get_current_size()}")
-    
-    # Step 5: Compute features using history manager
+    # Step 4: Compute features using history manager (BEFORE adding current to queue)
+    # This ensures features use only historical data, not current minute
     logger.info("Computing features...")
     df_with_features = engine.compute_features(df, history_mgr, filename=filename)
+    
+    # Step 5: Add DataFrame to history manager with temporal validation (AFTER feature computation)
+    # This maintains the rolling queue for subsequent files in batch mode
+    history_mgr.add_minute(df, date, minute)
+    logger.info(f"History queue size after adding current: {history_mgr.get_current_size()}")
     
     # Step 6: Round numerics
     logger.info("Rounding numeric values...")

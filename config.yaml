@@ -15,9 +15,10 @@ s3:
 
 # Threading Configuration
 threading:
-  max_threads: 20  # Maximum concurrent date threads
+  max_threads: 10  # Maximum concurrent date threads (reduced to avoid Lambda rate limits)
   batch_size: null  # null = process all files for date in single Lambda invocation
                     # Set to integer (e.g., 50) to limit batch size per invocation
+  rate_limit_delay: 0.5  # Delay in seconds between Lambda invocations to avoid rate limiting
 
 # Retry Configuration
 retry:

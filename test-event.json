@@ -1,8 +1,0 @@
-{
-  "s3_uris": [
-    "s3://spy-no-history-features/one-minute/20250325/strikes_202503250930.parquet",
-    "s3://spy-no-history-features/one-minute/20250325/strikes_202503250931.parquet",
-    "s3://spy-no-history-features/one-minute/20250325/strikes_202503250932.parquet"
-  ],
-  "mode": "batch"
-}

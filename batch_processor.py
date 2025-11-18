@@ -2,6 +2,7 @@
 
 import logging
 import boto3
+from botocore.config import Config
 import yaml
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -46,10 +47,16 @@ class BatchProcessor:
         self.max_threads = max_threads or config.get('threading', {}).get('max_threads', 20)
         self.region = region or config.get('lambda', {}).get('region', 'us-east-1')
         
-        self.s3_client = boto3.client('s3', region_name=self.region)
+        # Configure S3 client with larger connection pool for concurrent operations
+        s3_config = Config(
+            max_pool_connections=50,  # Increased from default 10
+            retries={'max_attempts': 3, 'mode': 'adaptive'}
+        )
+        
+        self.s3_client = boto3.client('s3', region_name=self.region, config=s3_config)
         self.lambda_client = LambdaClient(self.function_name, self.region)
         
-        logger.info(f"BatchProcessor initialized: {self.function_name}, max_threads={self.max_threads}")
+        logger.info(f"BatchProcessor initialized: {self.function_name}, max_threads={self.max_threads} (max_pool_connections=50)")
     
     def _load_config(self, config_path: Optional[str] = None) -> Dict:
         """
@@ -166,7 +173,8 @@ class BatchProcessor:
             # Submit dates in chronological order
             for date, uris in unprocessed_by_date.items():
                 thread = DateThread(date, uris, self.lambda_client)
-                future = executor.submit(thread.process)
+                # Process with batch_size=45 (fits within Lambda timeout with extended read timeout)
+                future = executor.submit(thread.process, batch_size= 100, max_retries=3)
                 futures[future] = date
             
             # Wait for completion and show progress

@@ -2,12 +2,13 @@
 
 import logging
 import boto3
+from botocore.config import Config as BotocoreConfig
+from botocore.exceptions import ClientError
 import pandas as pd
 import io
 import time
 import random
 from typing import Dict
-from botocore.exceptions import ClientError
 
 from config import Config
 
@@ -19,8 +20,14 @@ class S3Manager:
     
     def __init__(self):
         """Initialize S3Manager with boto3 client."""
-        self.s3_client = boto3.client('s3')
-        logger.info("S3Manager initialized")
+        # Configure with larger connection pool for concurrent operations
+        config = BotocoreConfig(
+            max_pool_connections=50,  # Increased from default 10
+            retries={'max_attempts': 3, 'mode': 'adaptive'}
+        )
+        
+        self.s3_client = boto3.client('s3', config=config)
+        logger.info("S3Manager initialized (max_pool_connections=50)")
     
     def read_parquet(self, s3_uri: str) -> pd.DataFrame:
         """

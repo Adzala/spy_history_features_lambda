@@ -16,7 +16,7 @@ Parameters:
 Globals:
   Function:
     Timeout: 900  # 15 minutes
-    MemorySize: 1024  # 1024MB for history queue
+    MemorySize: 3008  # 3008MB for better CPU and performance
     Runtime: python3.11
     Architectures:
       - x86_64
@@ -36,7 +36,7 @@ Resources:
           SOURCE_BUCKET: !Ref SourceBucket
           DEST_BUCKET: !Ref DestBucket
           HISTORY_WINDOW_SIZE: 300
-          NUMERIC_PRECISION: 4
+          NUMERIC_PRECISION: 3
           TIMEOUT_BUFFER_SECONDS: 5
           LOG_LEVEL: INFO
       Layers:

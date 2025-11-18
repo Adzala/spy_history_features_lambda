@@ -3,7 +3,7 @@
 import logging
 import pandas as pd
 import numpy as np
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, List
 from .registry import FeatureSection
 
 if TYPE_CHECKING:
@@ -65,113 +65,35 @@ class SectionContractFeatures(FeatureSection):
         for feature in self.feature_names:
             df_result[feature] = np.nan
         
-        # Process each row (each contract)
-        for idx, row in df_result.iterrows():
-            expiry = row['expirDate']
-            strike = row['strike']
-            
-            # Get current values
-            current_call_mid = row.get('CallMid', np.nan)
-            current_call_iv = row.get('CallIVMid', np.nan)
-            current_call_spread = row.get('CallSpreadPct', np.nan)
-            current_call_volume = row.get('callVolume', np.nan)
-            
-            current_put_mid = row.get('PutMid', np.nan)
-            current_put_iv = row.get('PutIVMid', np.nan)
-            current_put_spread = row.get('PutSpreadPct', np.nan)
-            current_put_volume = row.get('putVolume', np.nan)
-            
-            # Compute Call features
-            # CallMidReturn features
-            df_result.loc[idx, 'CallMidReturn_L1'] = self._compute_log_return(
-                history_mgr, expiry, strike, current_call_mid, 'CallMid', lag=1
-            )
-            df_result.loc[idx, 'CallMidReturn_L2'] = self._compute_log_return(
-                history_mgr, expiry, strike, current_call_mid, 'CallMid', lag=2
-            )
-            df_result.loc[idx, 'CallMidReturn_L3'] = self._compute_log_return(
-                history_mgr, expiry, strike, current_call_mid, 'CallMid', lag=3
-            )
-            
-            # CallMidZ features
-            df_result.loc[idx, 'CallMidZ_3'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_call_mid, 'CallMid', window=3
-            )
-            df_result.loc[idx, 'CallMidZ_5'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_call_mid, 'CallMid', window=5
-            )
-            
-            # CallIVChange features
-            df_result.loc[idx, 'CallIVChange_L1'] = self._compute_change(
-                history_mgr, expiry, strike, current_call_iv, 'CallIVMid', lag=1
-            )
-            
-            # CallIVZ features
-            df_result.loc[idx, 'CallIVZ_3'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_call_iv, 'CallIVMid', window=3
-            )
-            df_result.loc[idx, 'CallIVZ_5'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_call_iv, 'CallIVMid', window=5
-            )
-            
-            # CallVolumeZ features
-            df_result.loc[idx, 'CallVolumeZ_3'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_call_volume, 'callVolume', window=3
-            )
-            df_result.loc[idx, 'CallVolumeZ_5'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_call_volume, 'callVolume', window=5
-            )
-            
-            # CallSpreadPctChange features
-            df_result.loc[idx, 'CallSpreadPctChange_L1'] = self._compute_change(
-                history_mgr, expiry, strike, current_call_spread, 'CallSpreadPct', lag=1
-            )
-            
-            # Compute Put features (symmetric)
-            # PutMidReturn features
-            df_result.loc[idx, 'PutMidReturn_L1'] = self._compute_log_return(
-                history_mgr, expiry, strike, current_put_mid, 'PutMid', lag=1
-            )
-            df_result.loc[idx, 'PutMidReturn_L2'] = self._compute_log_return(
-                history_mgr, expiry, strike, current_put_mid, 'PutMid', lag=2
-            )
-            df_result.loc[idx, 'PutMidReturn_L3'] = self._compute_log_return(
-                history_mgr, expiry, strike, current_put_mid, 'PutMid', lag=3
-            )
-            
-            # PutMidZ features
-            df_result.loc[idx, 'PutMidZ_3'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_put_mid, 'PutMid', window=3
-            )
-            df_result.loc[idx, 'PutMidZ_5'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_put_mid, 'PutMid', window=5
-            )
-            
-            # PutIVChange features
-            df_result.loc[idx, 'PutIVChange_L1'] = self._compute_change(
-                history_mgr, expiry, strike, current_put_iv, 'PutIVMid', lag=1
-            )
-            
-            # PutIVZ features
-            df_result.loc[idx, 'PutIVZ_3'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_put_iv, 'PutIVMid', window=3
-            )
-            df_result.loc[idx, 'PutIVZ_5'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_put_iv, 'PutIVMid', window=5
-            )
-            
-            # PutVolumeZ features
-            df_result.loc[idx, 'PutVolumeZ_3'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_put_volume, 'putVolume', window=3
-            )
-            df_result.loc[idx, 'PutVolumeZ_5'] = self._compute_zscore(
-                history_mgr, expiry, strike, current_put_volume, 'putVolume', window=5
-            )
-            
-            # PutSpreadPctChange features
-            df_result.loc[idx, 'PutSpreadPctChange_L1'] = self._compute_change(
-                history_mgr, expiry, strike, current_put_spread, 'PutSpreadPct', lag=1
-            )
+        # Build historical lookups for vectorized operations
+        hist_lag_1 = self._build_lag_lookup(history_mgr, lag=1)
+        hist_lag_2 = self._build_lag_lookup(history_mgr, lag=2)
+        hist_lag_3 = self._build_lag_lookup(history_mgr, lag=3)
+        hist_window_3 = self._build_window_data(history_mgr, window=3)
+        hist_window_5 = self._build_window_data(history_mgr, window=5)
+        
+        # Vectorized Call features
+        if hist_lag_1 is not None:
+            df_result = self._compute_log_returns_vectorized(df_result, hist_lag_1, 'Call', lag=1)
+            df_result = self._compute_log_returns_vectorized(df_result, hist_lag_1, 'Put', lag=1)
+            df_result = self._compute_changes_vectorized(df_result, hist_lag_1, 'Call', lag=1)
+            df_result = self._compute_changes_vectorized(df_result, hist_lag_1, 'Put', lag=1)
+        
+        if hist_lag_2 is not None:
+            df_result = self._compute_log_returns_vectorized(df_result, hist_lag_2, 'Call', lag=2)
+            df_result = self._compute_log_returns_vectorized(df_result, hist_lag_2, 'Put', lag=2)
+        
+        if hist_lag_3 is not None:
+            df_result = self._compute_log_returns_vectorized(df_result, hist_lag_3, 'Call', lag=3)
+            df_result = self._compute_log_returns_vectorized(df_result, hist_lag_3, 'Put', lag=3)
+        
+        if hist_window_3 is not None:
+            df_result = self._compute_zscores_vectorized(df_result, hist_window_3, 'Call', window=3)
+            df_result = self._compute_zscores_vectorized(df_result, hist_window_3, 'Put', window=3)
+        
+        if hist_window_5 is not None:
+            df_result = self._compute_zscores_vectorized(df_result, hist_window_5, 'Call', window=5)
+            df_result = self._compute_zscores_vectorized(df_result, hist_window_5, 'Put', window=5)
         
         # Round all computed features to 4 decimals
         computed_features = self.feature_names
@@ -181,199 +103,144 @@ class SectionContractFeatures(FeatureSection):
         
         return df_result
     
-    def _get_historical_contract_value(
-        self,
-        hist_df: pd.DataFrame,
-        expiry: str,
-        strike: float,
-        column: str
-    ) -> float:
-        """
-        Extract value for a specific contract (expiry, strike) from historical DataFrame.
-        
-        Args:
-            hist_df: Historical DataFrame
-            expiry: Expiry date to filter
-            strike: Strike price to filter
-            column: Column name to extract
-        
-        Returns:
-            Value or NaN if not found
-        """
-        try:
-            # Filter for the specific expiry and strike
-            contract_data = hist_df[(hist_df['expirDate'] == expiry) & (hist_df['strike'] == strike)]
-            
-            if contract_data.empty:
-                return np.nan
-            
-            # Take first row if multiple (shouldn't happen)
-            value = contract_data.iloc[0].get(column, np.nan)
-            
-            return value if not pd.isna(value) else np.nan
-        except (KeyError, IndexError):
-            return np.nan
-    
-    def _compute_log_return(
-        self,
-        history_mgr: 'HistoryManager',
-        expiry: str,
-        strike: float,
-        current_value: float,
-        column: str,
-        lag: int
-    ) -> float:
-        """
-        Compute log return over lag k: ln(value_t / value_{t-k}).
-        
-        Args:
-            history_mgr: HistoryManager instance
-            expiry: Expiry date
-            strike: Strike price
-            current_value: Current value
-            column: Column name to extract from history
-            lag: Number of minutes to look back
-        
-        Returns:
-            Log return or NaN if insufficient history
-        """
-        # Check if we have enough history
+    def _build_lag_lookup(self, history_mgr: 'HistoryManager', lag: int) -> Optional[pd.DataFrame]:
+        """Build historical lookup DataFrame for a specific lag."""
         if history_mgr.get_current_size() < lag:
-            return np.nan
-        
-        # Check if current value is valid and positive
-        if pd.isna(current_value) or current_value <= 0:
-            return np.nan
+            return None
         
         try:
-            # Get historical DataFrame
-            if lag > len(history_mgr.queue):
-                return np.nan
-            
             index = -lag
             hist_df = list(history_mgr.queue)[index][3]
             
             if hist_df is None or hist_df.empty:
-                return np.nan
+                return None
             
-            # Extract historical value
-            historical_value = self._get_historical_contract_value(hist_df, expiry, strike, column)
-            
-            if pd.isna(historical_value) or historical_value <= 0:
-                return np.nan
-            
-            # Compute log return
-            return np.log(current_value / historical_value)
+            # Return relevant columns
+            cols = ['expirDate', 'strike', 'CallMid', 'CallIVMid', 'CallSpreadPct', 'callVolume',
+                   'PutMid', 'PutIVMid', 'PutSpreadPct', 'putVolume']
+            return hist_df[cols].copy()
         except (KeyError, IndexError):
-            return np.nan
+            return None
     
-    def _compute_change(
-        self,
-        history_mgr: 'HistoryManager',
-        expiry: str,
-        strike: float,
-        current_value: float,
-        column: str,
-        lag: int
-    ) -> float:
-        """
-        Compute change over lag k: value_t - value_{t-k}.
-        
-        Args:
-            history_mgr: HistoryManager instance
-            expiry: Expiry date
-            strike: Strike price
-            current_value: Current value
-            column: Column name to extract from history
-            lag: Number of minutes to look back
-        
-        Returns:
-            Change value or NaN if insufficient history
-        """
-        # Check if we have enough history
-        if history_mgr.get_current_size() < lag:
-            return np.nan
-        
-        # Check if current value is valid
-        if pd.isna(current_value):
-            return np.nan
-        
-        try:
-            # Get historical DataFrame
-            if lag > len(history_mgr.queue):
-                return np.nan
-            
-            index = -lag
-            hist_df = list(history_mgr.queue)[index][3]
-            
-            if hist_df is None or hist_df.empty:
-                return np.nan
-            
-            # Extract historical value
-            historical_value = self._get_historical_contract_value(hist_df, expiry, strike, column)
-            
-            if pd.isna(historical_value):
-                return np.nan
-            
-            # Compute change
-            return current_value - historical_value
-        except (KeyError, IndexError):
-            return np.nan
-    
-    def _compute_zscore(
-        self,
-        history_mgr: 'HistoryManager',
-        expiry: str,
-        strike: float,
-        current_value: float,
-        column: str,
-        window: int
-    ) -> float:
-        """
-        Compute z-score over window N: (value - mean) / std.
-        
-        Args:
-            history_mgr: HistoryManager instance
-            expiry: Expiry date
-            strike: Strike price
-            current_value: Current value
-            column: Column name to extract from history
-            window: Window size in minutes
-        
-        Returns:
-            Z-score or NaN if insufficient history
-        """
+    def _build_window_data(self, history_mgr: 'HistoryManager', window: int) -> Optional[pd.DataFrame]:
+        """Build concatenated historical data for a window."""
         window_dfs = history_mgr.get_window(window)
         
         if len(window_dfs) < window:
-            return np.nan
-        
-        # Check if current value is valid
-        if pd.isna(current_value):
-            return np.nan
+            return None
         
         try:
-            # Extract values from window
-            values = []
-            for hist_df in window_dfs:
-                hist_value = self._get_historical_contract_value(hist_df, expiry, strike, column)
-                if not pd.isna(hist_value):
-                    values.append(hist_value)
+            cols = ['expirDate', 'strike', 'CallMid', 'CallIVMid', 'callVolume',
+                   'PutMid', 'PutIVMid', 'putVolume']
+            dfs_to_concat = [df[cols].copy() for df in window_dfs if df is not None and not df.empty]
             
-            # Add current value
-            values.append(current_value)
+            if not dfs_to_concat:
+                return None
             
-            if len(values) < 2:
-                return np.nan
-            
-            # Compute z-score
-            mean = np.mean(values)
-            std = np.std(values, ddof=1)
-            
-            # Avoid division by zero
-            if std < 1e-6:
-                return np.nan
-            
-            return (current_value - mean) / std
+            return pd.concat(dfs_to_concat, ignore_index=True)
         except (KeyError, IndexError):
-            return np.nan
+            return None
+    
+    def _compute_log_returns_vectorized(
+        self, 
+        df: pd.DataFrame, 
+        hist_df: pd.DataFrame, 
+        leg: str,
+        lag: int
+    ) -> pd.DataFrame:
+        """Vectorized log return computation."""
+        col = f'{leg}Mid'
+        
+        # Merge to get historical values
+        merged = df.merge(
+            hist_df[['expirDate', 'strike', col]],
+            on=['expirDate', 'strike'],
+            how='left',
+            suffixes=('', '_hist')
+        )
+        
+        # Compute log returns vectorized
+        current = merged[col]
+        historical = merged[f'{col}_hist']
+        
+        # Only compute where both values are positive
+        mask = (current > 0) & (historical > 0)
+        df[f'{leg}MidReturn_L{lag}'] = np.where(mask, np.log(current / historical), np.nan)
+        
+        return df
+    
+    def _compute_changes_vectorized(
+        self,
+        df: pd.DataFrame,
+        hist_df: pd.DataFrame,
+        leg: str,
+        lag: int
+    ) -> pd.DataFrame:
+        """Vectorized change computation."""
+        # IV change
+        iv_col = f'{leg}IVMid'
+        merged_iv = df.merge(
+            hist_df[['expirDate', 'strike', iv_col]],
+            on=['expirDate', 'strike'],
+            how='left',
+            suffixes=('', '_hist')
+        )
+        df[f'{leg}IVChange_L{lag}'] = merged_iv[iv_col] - merged_iv[f'{iv_col}_hist']
+        
+        # Spread change
+        spread_col = f'{leg}SpreadPct'
+        merged_spread = df.merge(
+            hist_df[['expirDate', 'strike', spread_col]],
+            on=['expirDate', 'strike'],
+            how='left',
+            suffixes=('', '_hist')
+        )
+        df[f'{leg}SpreadPctChange_L{lag}'] = merged_spread[spread_col] - merged_spread[f'{spread_col}_hist']
+        
+        return df
+    
+    def _compute_zscores_vectorized(
+        self,
+        df: pd.DataFrame,
+        hist_window: pd.DataFrame,
+        leg: str,
+        window: int
+    ) -> pd.DataFrame:
+        """Vectorized z-score computation."""
+        # Compute stats for each contract
+        mid_col = f'{leg}Mid'
+        iv_col = f'{leg}IVMid'
+        vol_col = f'{leg.lower()}Volume'
+        
+        # Group by contract and compute mean/std
+        stats_mid = hist_window.groupby(['expirDate', 'strike'])[mid_col].agg(['mean', 'std']).reset_index()
+        stats_iv = hist_window.groupby(['expirDate', 'strike'])[iv_col].agg(['mean', 'std']).reset_index()
+        stats_vol = hist_window.groupby(['expirDate', 'strike'])[vol_col].agg(['mean', 'std']).reset_index()
+        
+        # Merge stats back to current data
+        df_with_stats_mid = df.merge(stats_mid, on=['expirDate', 'strike'], how='left', suffixes=('', '_stats'))
+        df_with_stats_iv = df.merge(stats_iv, on=['expirDate', 'strike'], how='left', suffixes=('', '_stats'))
+        df_with_stats_vol = df.merge(stats_vol, on=['expirDate', 'strike'], how='left', suffixes=('', '_stats'))
+        
+        # Compute z-scores vectorized
+        df[f'{leg}MidZ_{window}'] = np.where(
+            df_with_stats_mid['std'] > 1e-6,
+            (df[mid_col] - df_with_stats_mid['mean']) / df_with_stats_mid['std'],
+            np.nan
+        )
+        
+        df[f'{leg}IVZ_{window}'] = np.where(
+            df_with_stats_iv['std'] > 1e-6,
+            (df[iv_col] - df_with_stats_iv['mean']) / df_with_stats_iv['std'],
+            np.nan
+        )
+        
+        df[f'{leg}VolumeZ_{window}'] = np.where(
+            df_with_stats_vol['std'] > 1e-6,
+            (df[vol_col] - df_with_stats_vol['mean']) / df_with_stats_vol['std'],
+            np.nan
+        )
+        
+        return df
+    
+
