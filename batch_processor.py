@@ -337,6 +337,8 @@ Examples:
     parser.add_argument('--log-level', default='INFO',
                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                        help='Logging level (default: INFO)')
+    parser.add_argument('--yes', '-y', action='store_true',
+                       help='Auto-confirm processing without prompting')
     
     args = parser.parse_args()
     
